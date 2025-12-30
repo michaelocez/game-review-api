@@ -1,0 +1,278 @@
+{
+  "user_register": {
+    "type": "object",
+    "properties": {
+      "firstName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "lastName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "email": {
+        "type": "string",
+        "format": "email",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "password": {
+        "type": "string",
+        "format": "password",
+        "minLength": 6,
+        "maxLength": 64
+      }
+    },
+    "required": [
+      "firstName",
+      "lastName",
+      "email",
+      "password"
+    ],
+    "additionalProperties": false
+  },
+  "user_login": {
+    "type": "object",
+    "properties": {
+      "email": {
+        "type": "string",
+        "format": "email",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "password": {
+        "type": "string",
+        "format": "password",
+        "minLength": 6,
+        "maxLength": 64
+      }
+    },
+    "required": [
+      "email",
+      "password"
+    ],
+    "additionalProperties": false
+  },
+  "user_edit": {
+    "type": "object",
+    "properties": {
+      "firstName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "lastName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "email": {
+        "type": "string",
+        "format": "email",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "password": {
+        "type": "string",
+        "format": "password",
+        "minLength": 6,
+        "maxLength": 64
+      },
+      "currentPassword": {
+        "type": "string",
+        "format": "password",
+        "minLength": 6,
+        "maxLength": 64
+      }
+    }
+  },
+  "game_search": {
+    "type": "object",
+    "properties": {
+      "q": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "creatorId": {
+        "type": "string",
+        "minLength": 1,
+        "format": "integer"
+      },
+      "reviewerId": {
+        "type": "string",
+        "minLength": 1,
+        "format": "integer"
+      },
+      "startIndex": {
+        "type": "string",
+        "minLength": 1,
+        "format": "integer"
+      },
+      "count": {
+        "type": "string",
+        "minLength": 1,
+        "format": "integer"
+      },
+      "price": {
+        "type": "string",
+        "minLength": 1,
+        "format": "integer"
+      },
+      "sortBy": {
+        "type": "string",
+        "enum": [
+          "ALPHABETICAL_ASC",
+          "ALPHABETICAL_DESC",
+          "PRICE_ASC",
+          "PRICE_DESC",
+          "RATING_ASC",
+          "RATING_DESC",
+          "CREATED_ASC",
+          "CREATED_DESC"
+        ]
+      },
+      "genreIds": {
+        "anyOf": [
+          {
+            "type": "string",
+            "format": "integer"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "integer"
+            }
+          }
+        ]
+      },
+      "platformIds": {
+        "anyOf": [
+          {
+            "type": "string",
+            "format": "integer"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "integer"
+            }
+          }
+        ]
+      },
+      "wishlistedByMe": {
+        "type": "string",
+        "format": "boolean"
+      },
+      "ownedByMe": {
+        "type": "string",
+        "format": "boolean"
+      }
+    }
+  },
+  "game_post": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "nullable": false
+      },
+      "description": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "nullable": false
+      },
+      "genreId": {
+        "type": "integer",
+        "minimum": 0,
+        "nullable": false
+      },
+      "platformIds": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "nullable": false
+        }
+      },
+      "price": {
+        "type": "integer",
+        "minimum": 0,
+        "nullable": false
+      }
+    },
+    "required": [
+      "title",
+      "description",
+      "genreId",
+      "platformIds",
+      "price"
+    ],
+    "additionalProperties": false
+  },
+  "game_patch": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "nullable": false
+      },
+      "description": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "nullable": false
+      },
+      "genreId": {
+        "type": "integer",
+        "minimum": 0,
+        "nullable": false
+      },
+      "platformIds": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "nullable": false
+        }
+      },
+      "price": {
+        "type": "integer",
+        "minimum": 0,
+        "nullable": false
+      }
+    },
+    "additionalProperties": false
+  },
+  "game_review_post": {
+    "type": "object",
+    "properties": {
+      "review": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "rating": {
+        "type": "number",
+        "enum": [
+          1,2,3,4,5,6,7,8,9,10
+        ]
+      }
+    },
+    "required": [
+      "rating"
+    ],
+    "additionalProperties": false
+  }
+}

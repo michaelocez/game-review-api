@@ -1,0 +1,1067 @@
+openapi: 3.0.0
+info:
+  title: "SENG365 2025: Game Review Site API"
+  version: 0.0.1
+  description: "This specification documents the Game Review API to be implemented for Assignment 1. This API provides all of the server-side functionality necessary in order to implement all the user stories for Assignment 2"
+servers:
+  - url: https://seng365.csse.canterbury.ac.nz/api/v1
+    description: "Reference server"
+  - url: http://localhost:4941/api/v1
+    description: "Your development server"
+tags:
+  - name: backdoor
+    description: "Development-only endpoints for resetting the database or querying it directly.<br>**These endpoints have been implemented for you, any changes to their functionality may cause tests to break**."
+  - name: users
+    description: "Endpoints for registering, logging in, modifying, and retrieving user information"
+  - name: users.images
+    description: "Endpoints for retrieving, uploading and deleting user profile images"
+  - name: games
+    description: "Endpoints for retrieving, creating, modifying, and deleting games"
+  - name: games.reviews
+    description: "Endpoints for viewing and updating game reviews"
+  - name: games.images
+    description: "Endpoints for retrieving and uploading game cover images"
+paths:
+  /reset:
+    post:
+      tags:
+        - backdoor
+      summary: "Force reset of database to original structure."
+      responses:
+        '200':
+          description: "OK"
+        '500':
+          description: "Internal Server Error"
+  /resample:
+    post:
+      tags:
+        - backdoor
+      summary: "Reload sample of data into database."
+      responses:
+        '201':
+          description: "Created"
+        '500':
+          description: "Internal Server Error"
+  /reload:
+    post:
+      tags:
+        - backdoor
+      summary: "Force reset of database to original structure and reload all sample data"
+      responses:
+        201:
+          description: "Created"
+        500:
+          description: "Internal Server Error"
+  /executesql:
+    post:
+      tags:
+        - backdoor
+      summary: "Execute any arbitrary SQL statement provided, and return the output from the database."
+      description: "This is an enormous security hole, and <b>wouldn't</b> be present in any real-world application. However, we're using it for testing purposes in this assignment"
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              title: SqlCommand
+              type: string
+              example: "SELECT * from users;"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/SqlResult"
+                  - $ref: "#/components/schemas/SqlResultSet"
+        500:
+          description: "Internal Server Error"
+  /users/register:
+    post:
+      tags:
+        - users
+      summary: "Register as a new user"
+      description: "Create a new user with the specified information.<ul><li>The email **must be syntactically valid** (e.g. it has to include an `@` and a top level domain for example `x@y.z`). Whether it is actually a registered email address will not be checked.</li><li>The email address <b>must not already be in use</b> (if it is in use the server should return a 403).</li><li>The password **must be at least 6 characters**</li></ul>"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterUser"
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        400:
+          description: "Bad Request."
+        403:
+          description: "Forbidden.<ul><li>Email already in use</li></ul>"
+        500:
+          description: "Internal Sever Error"
+  /users/login:
+    post:
+      tags:
+        - users
+      summary: "Log in as an existing user."
+      description: "The response will contain a (unique) randomly-generated token that that client-side should store.<br>Whenever the client makes a request that requires authentication it should provide that same token as the value of the `X-Authorization` header in the request. The server will compare this to the value it has stored in the database to authenticate that request."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginUser"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        400:
+          description: "Bad Request. Invalid information"
+        401:
+          description: "Unauthorized. Incorrect email/password"
+        500:
+          description: "Internal Server Error"
+  /users/logout:
+    post:
+      tags:
+        - users
+      summary: "Log out the currently authorised user."
+      description: "User will be logged out and their token will no longer be accepted for authenticated requests"
+      security:
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+        401:
+          description: "Unauthorized. Cannot log out if you are not authenticated"
+        500:
+          description: "Internal Server Error"
+  /users/{id}:
+    parameters:
+      - name: "id"
+        description: "ID of the user"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/LoginResponse/properties/userId"
+    get:
+      tags:
+        - users
+      summary: "Retrieve information about a user"
+      description: "The email field is only returned when the currently authenticated user is viewing their **own** details. Otherwise only the first and last names should be returned (this includes unauthenticated requests)."
+      security:
+        - {}
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+                required:
+                  - firstName
+                  - lastName
+        400:
+          description: "Bad Request"
+        404:
+          description: "Not Found. No user with specified ID"
+        500:
+          description: "Internal Server Error"
+    patch:
+      tags:
+        - users
+      summary: "Change a user's details"
+      description: "Update a user's information with that specified. Only accessible by the user themselves.<ul><li>The email must be syntactically valid and not in use as described in `/users/register`.</li><li>The `password` and `currentPassword` fields **can only be supplied when editing the password**.</li><li>The `currentPassword` **must match the users existing password**.</li><li>`currentPassword` and `password` **must not be the same**.</li><li>`currentPassword` and `password` **must be at least 6 characters**</li></ul>. **Note**: A subset of values can be supplied in the body (i.e. only changing the email)"
+      security:
+        - UserToken: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchUser"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad request."
+        401:
+          description: "Unauthorized or Invalid currentPassword"
+        403:
+          description: "Forbidden. <ul><li>Can not edit another user's information</li><li>Email is already in use</li><li>Identical current and new passwords</li></ul>"
+        404:
+          description: "Not Found"
+        500:
+          description: "Internal Server Error"
+  /users/{id}/image:
+    parameters:
+      - name: "id"
+        description: "ID of the user"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/LoginResponse/properties/userId"
+    get:
+      tags:
+        - users.images
+      summary: "Retrieve a user's profile image"
+      description: "The response MIME type will be one of `image/png`, `image/jpeg`, or `image/gif` depending on the filetype of the image being retrieved."
+      responses:
+        200:
+          description: "OK"
+          content:
+            image:
+              schema:
+                $ref: "#/components/schemas/BinaryImageFile"
+        400:
+          description: "Bad Request"
+        404:
+          description: "Not Found. No user with specified ID, or user has no image"
+        500:
+          description: "Internal Server Error"
+    put:
+      tags:
+        - users.images
+      summary: "Set a user's profile photo"
+      description: "Only accessible to the user themselves. If the user already has a profile photo, the current profile photo will be replaced with it and a 200 OK response sent. If not, a 201 Created response will be sent.<br>If the file is a `.png`, the request will be sent with `Content-Type: image/png`. If the file is a `.jpeg` or `.jpg`, the request will be sent with `Content-Type: image/jpeg`. If the file is a `.gif`, the request will be sent with `Content-Type: image/gif`.<br>The request body should contain the raw binary content of the photo, i.e. it should not be in `multipart/form-data` format or contain any file metadata."
+      security:
+        - UserToken: []
+      requestBody:
+        content:
+          image/png:
+            schema:
+              $ref: "#/components/schemas/BinaryImageFile"
+          image/jpeg:
+            schema:
+              $ref: "#/components/schemas/BinaryImageFile"
+          image/gif:
+            schema:
+              $ref: "#/components/schemas/BinaryImageFile"
+        required: true
+      responses:
+        200:
+          description: "OK. Image updated"
+        201:
+          description: "Created. New image created"
+        400:
+          description: "Bad Request. Invalid image supplied (possibly incorrect file type)"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden<ul><li>Can not change another user's profile photo</li></ul>"
+        404:
+          description: "Not found. No such user with ID given"
+        500:
+          description: "Internal Server Error"
+    delete:
+      tags:
+        - users.images
+      summary: "Delete a user's profile image"
+      security:
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden. <ul><li>Can not delete another user's profile photo</li></ul>"
+        404:
+          description: "Not Found. No such user with ID given"
+        500:
+          description: "Internal Server Error"
+  /games:
+    get:
+      tags:
+        - games
+      summary: "View Games"
+      description: "Get a list of all games with a subset of information.</br>By default the games will be sorted from the most recently released to the oldest released. The list is then filtered, sorted and paginated using the relevant parameters provided in the request or specified defaults.</br>The returned object includes both a list of games that match the parameters and the total number of matching games (which may differ from the number in the list when accounting for pagination)."
+      parameters:
+        - in: query
+          name: startIndex
+          description: "Number of items to skip before returning results"
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/startIndex"
+        - in: query
+          name: count
+          description: "Number of items to include in results."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/count"
+        - in: query
+          name: q
+          description: "Only include games that have 'q' term in their title or description.<br><i>Works using `LIKE %q%` SQL check</i>."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/q"
+        - in: query
+          name: genreIds
+          description: "Only include games that match **any** of the given genres (by id). Only ids that map to known genres allowed."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/genreIds"
+        - in: query
+          name: price
+          description: "Only include games that cost less than or equal to the given price (as an integer representing cents i.e. $9.99 is given as 999). A value of 0 will only include games that are free."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/price"
+        - in: query
+          name: platformIds
+          description: "Only include games that are released for **any** of the given platforms (by id). Only ids that map to known platforms allowed."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/platformIds"
+        - in: query
+          name: creatorId
+          description: "Only include games that have the given user (id) as their creator."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/creatorId"
+        - in: query
+          name: reviewerId
+          description: "Only include games that where the given user (id) is a reviewer."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/reviewerId"
+        - in: query
+          name: sortBy
+          description: "Sort the games by the given property, according to the following rules:<ul><li>`ALPHABETICAL_ASC`: alphabetically by title, A-Z</li><li>`ALPHABETICAL_DESC`: alphabetically by title, Z-A</li><li>`PRICE_ASC`: by price ascending</li><li>`PRICE_DESC`: by price descending</li></li>`CREATED_ASC`: chronologically in order of creation date oldest-newest</li><li>`CREATED_DESC`: chronologically in order of creation date newest-oldest</li><li>`RATING_ASC`: by rating ascending</li><li>`RATING_DESC`: by rating descending</li></ul>"
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/sortBy"
+        - in: query
+          name: ownedByMe
+          description: "Only include games the current user has marked as owned when `true` and requires sending the authorization token. If `false` is supplied it should be ignored and the authorization token not validated."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/ownedByMe"
+        - in: query
+          name: wishlistedByMe
+          description: "Only include games the current user has marked as wishlisted when `true` and requires sending the authorization token. If `false` is supplied it should be ignored and the authorization token not validated."
+          schema:
+            $ref: "#/components/schemas/GameSearchRequest/properties/wishlistedByMe"
+
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameSearchResponse"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        500:
+          description: "Internal Server Error"
+    post:
+      tags:
+        - games
+      summary: "Add a new game"
+      description: "Create a new game.<ul><li>The `genreId` **must reference an existing genre**</li><li>A game must have a `price`, if the game is free the price must be given as `0`</li><li>The `title` **must be unique**</li><li>A game must be for **1 or more** `platforms`, and **each platform must match those known by the system**</li></ul>"
+      security:
+        - UserToken: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostGame"
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                properties:
+                  gameId:
+                    $ref: "#/components/schemas/GameOverview/properties/gameId"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden. <ul><li>Game title already exists</li></ul>"
+        500:
+          description: "Internal Server Error"
+
+  /games/{id}:
+    parameters:
+      - name: id
+        description: "The id of the game"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/GameOverview/properties/gameId"
+    get:
+      tags:
+        - games
+      summary: "Retrieve detailed information about a game"
+      description: "Retrieve all information about a game matching `id`."
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        400:
+          description: "Bad Request"
+        404:
+          description: "Not Fount. No game with id"
+        500:
+          description: "Internal Server Error"
+    patch:
+      tags:
+        - games
+      summary: "Update an existing game"
+      description: "Make changes to the basic attributes (`title`, `description`, `price`, `platformIds` and `genreId`) of an existing game. Only accessible to the creator of the game. **Provided parameters must meet the same requirements as creating a new game**.<br>These basic values for a game can be updated at any time, even if there are already owners, wishlisters, or reviews."
+      security:
+        - UserToken: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchGame"
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad Request."
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden. <ul><li>Only the creator of a game may change it</li><li>Game title already exists</li></ul>"
+        404:
+          description: "Not Found. No game found with id"
+        500:
+          description: "Internal Server Error"
+    delete:
+      tags:
+        - games
+      summary: "Delete a game"
+      description: "Delete an existing game. Only accessible to the creator of the game. **Can not delete a game if it has one or more reviews**"
+      security:
+        - UserToken: []
+      responses:
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden.<ul><li>Only the creator of a game may delete it</li><li>Can not delete a game with one or more reviews</li></ul>"
+        404:
+          description: "Not Found. No game found with id"
+        500:
+          description: "Internal Server Error"
+  /games/genres:
+    get:
+      tags:
+        - games
+      summary: "Get all game categories"
+      description: "Retrieve a list of all known genres for games"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Genre"
+        500:
+          description: "Internal Server Error"
+  /games/platforms:
+    get:
+      tags:
+        - games
+      summary: "Get all game platforms"
+      description: "Retrieve a list of all known platforms for games"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Platform"
+        500:
+          description: "Internal Server Error"
+  /games/{id}/wishlist:
+    parameters:
+      - name: id
+        description:  "The id of the game"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/GameOverview/properties/gameId"
+    post:
+      tags:
+        - games.actions
+      summary: "Wishlist a game"
+      description: "Allows a user to mark the specified game as wishlisted. If the game is already marked as owned it can not be wishlisted. A user can not wishlist a game they created"
+      security:
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden.<ul><li>Can not wishlist a game you have marked as owned.</li><li>Can not wishlist a game you created</li></ul>"
+        404:
+          description: "Not found.<ul><li>No game with id</li></ul>"
+        500:
+          description: "Internal Server Error"
+    delete:
+      tags:
+        - games.actions
+      summary: "Remove game from Wishlist"
+      description: "Allows a user to unmark the specified game as wishlisted"
+      security:
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden.<ul><li>Can not unwishlist a game you do not currently wishlist</ul></li>"
+        404:
+          description: "Not found.<ul><li>No game with id</li></ul>"
+        500:
+          description: "Internal Server Error"
+  /games/{id}/owned:
+    parameters:
+      - name: id
+        description:  "The id of the game"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/GameOverview/properties/gameId"
+    post:
+      tags:
+        - games.actions
+      summary: "Mark a game as owned"
+      description: "Allows a user to mark the specified game as owned. **If the game is currently wishlisted it will be unmarked as wishlisted**. A user can not mark a game they created as owned."
+      security:
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden.<ul><li>Can not mark a game you created as owned</ul></li>"
+        404:
+          description: "Not found.<ul><li>No game with id</li></ul>"
+        500:
+          description: "Internal Server Error"
+    delete:
+      tags:
+        - games.actions
+      summary: "Unmark a game as owned"
+      description: "Allows a user to unmark the specified game as owned"
+      security:
+        - UserToken: []
+      responses:
+        200:
+          description: "OK"
+        400:
+          description: "Bad request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden. Can not unmark a game you do not currently own"
+        404:
+          description: "Not found.<ul><li>No game with id</li></ul>"
+        500:
+          description: "Internal Server Error"
+
+  /games/{id}/image:
+    parameters:
+      - name: id
+        description:  "The id of the game"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/GameOverview/properties/gameId"
+    get:
+      tags:
+        - games.images
+      summary: "Get a games cover image"
+      description: "Gets the specified games's cover image. The response MIME type will be either `image/png`, `image/jpeg`, or `image/gif`, depending on the file type of the image being retrieved."
+      responses:
+        200:
+          description: "OK"
+          content:
+            image:
+              schema:
+                $ref: "#/components/schemas/BinaryImageFile"
+        400:
+          description: "Bad Request"
+        404:
+          description: "Not found.<ul><li>No game with id</li><li>Game has no image</li></ul>"
+        500:
+          description: "Internal Server Error"
+    put:
+      tags:
+        - games.images
+      summary: "Set a game cover image"
+      description: "Set the specified games's cover image. Only available to the creator of the game. If the game already has a cover image, the current cover image will be replaced and a 200 OK response sent. If not, a 201 created response will be sent.<br>If the file is a `.png`, the request will be sent with `Content-Type: image/png`. If the file is a `.jpeg` or `.jpg`, the request will be sent with `Content-Type: image/jpeg`. If the file is a `.gif`, the request will be sent with `Content-Type: image/gif`. No other image types should be allowed. <br>The request body should contain the raw binary content of the photo, i.e. it should not be in `multipart/form-data` format or contain any file metadata."
+      security:
+        - UserToken: []
+      requestBody:
+        content:
+          image/png:
+            schema:
+              $ref: '#/components/schemas/BinaryImageFile'
+          image/jpeg:
+            schema:
+              $ref: '#/components/schemas/BinaryImageFile'
+          image/gif:
+            schema:
+              $ref: '#/components/schemas/BinaryImageFile'
+        required: true
+      responses:
+        200:
+          description: "OK. Image updated"
+        201:
+          description: "Created. Image added"
+        400:
+          description: "Bad Request"
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden. Only the creator of a game can change the hero image"
+        404:
+          description: "Not Found. No game found with id"
+        500:
+          description: "Internal Server Error"
+  /games/{id}/reviews:
+    parameters:
+      - name: id
+        description:  "The id of the game"
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/GameOverview/properties/gameId"
+    get:
+      tags:
+        - games.reviews
+      summary: "Get all the reviews for a game"
+      description: "The reviews are returned in reverse chronological order (from most recent to oldest) by `timestamp`"
+      responses:
+        200:
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameReview"
+        400:
+          description: "Bad Request"
+        404:
+          description: "Not Found. No game found with id"
+        500:
+          description: "Internal Server Error"
+    post:
+      tags:
+        - games.reviews
+      summary: "Place a review on a game"
+      description: "A user can only place a review on a game if they are not the creator, and they may only place one review per game. This review **must** have a `rating` between 1 - 10 (inclusive), and can **optionally** include a textual review."
+      security:
+        - UserToken: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostGameReview"
+      responses:
+        201:
+          description: "Created"
+        400:
+          description: "Bad Request."
+        401:
+          description: "Unauthorized"
+        403:
+          description: "Forbidden. <ul><li>Cannot review your own game.</li><li>Can only review a game once.</li></ul>"
+        404:
+          description: "Not Found. No game found with id"
+        500:
+          description: "Internal Server Error"
+
+components:
+  schemas:
+    SqlResult:
+      type: object
+      properties:
+        fieldCount:
+          type: integer
+          example: 0
+        affectedRows:
+          type: integer
+          example: 1
+        insertId:
+          type: integer
+          example: 1
+        serverStatus:
+          type: integer
+          example: 2
+        warningCount:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: "(Rows matched: 1 Changed: 0 Warnings 0)"
+        protocol41:
+          type: boolean
+          example: true
+        changedRows:
+          type: integer
+          example: 0
+    SqlResultSet:
+      type: array
+      items: {}
+    UserEmail:
+      title: UserEmail
+      type: object
+      properties:
+        email:
+          type: string
+          description: "<i>Must include an @ symbol and a top level domain i.e. \"x@y.z\"</i>"
+          minLength: 1
+          maxLength: 256
+          format: email
+          example: "adam@example.com"
+    UserPassword:
+      title: UserPassword
+      properties:
+        password:
+          type: string
+          minLength: 6
+          maxLength: 64
+          format: password
+          example: "password"
+    UserCurrentPassword:
+      title: UserCurrentPassword
+      properties:
+        currentPassword:
+          type: string
+          minLength: 6
+          maxLength: 64
+          format: password
+          example: "old_password"
+    User:
+      title: User
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/UserEmail"
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Jane"
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Doe"
+    RegisterUser:
+      title: RegisterUser
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - $ref: "#/components/schemas/UserPassword"
+      required:
+        - firstName
+        - lastName
+        - email
+        - password
+    LoginUser:
+      title: LoginUser
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/UserEmail"
+        - $ref: "#/components/schemas/UserPassword"
+      required:
+        - email
+        - password
+    RegisterResponse:
+      title: RegisterResponse
+      type: object
+      properties:
+        userId:
+          type: integer
+          minimum: 0
+          example: 11
+    LoginResponse:
+      title: LoginResponse
+      type: object
+      properties:
+        userId:
+          type: integer
+          minimum: 0
+          example: 11
+        token:
+          type: string
+          example: "JSkIEpXk0b2jLgDpRuKAjGwCbFnDM0Tj"
+    PatchUser:
+      title: PatchUser
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - $ref: "#/components/schemas/UserPassword"
+        - $ref: "#/components/schemas/UserCurrentPassword"
+    DateTimeInput:
+      title: DateTimeInput
+      description: A datetime expressed with no timezone, as either a date (yyyy-MM-dd) or date and time (yyyy-MM-dd hh:mm:ss.sss)
+      type: string
+      example: '2012-04-23 18:25:43'
+    DateTimeOutput:
+      title: DateTimeOutput
+      description: A UTC datetime expressed in ISO8601 format (yyyy-MM-ddThh:mm:ss.sssZ)
+      type: string
+      example: '2012-04-23T18:25:43.511Z'
+    BinaryImageFile:
+      type: string
+      format: binary
+      description: The raw content of the PNG, JPEG, or GIF image file.
+      example: (raw content of PNG, JPEG, or GIF image file)
+    Genre:
+      title: Genre
+      type: object
+      properties:
+        genreId:
+          type: integer
+          minimum: 0
+          example: 1
+          nullable: false
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Rougelike"
+          nullable: false
+    Platform:
+      title: Platform
+      type: object
+      properties:
+        platformId:
+          type: integer
+          minimum: 0
+          example: 1
+          nullable: false
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "PC"
+          nullable: false
+    GameSearchRequest:
+      title: GameSearchRequest
+      type: object
+      properties:
+        startIndex:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 10
+        count:
+          type: integer
+          minimum: 0
+          example: 10
+        q:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Park"
+        genreIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Genre/properties/genreId"
+        platformIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Platform/properties/platformId"
+        price:
+          type: integer
+          description: "Price is given as a integer representing cents"
+          minimum: 0
+          default: 0
+          example: 60
+        creatorId:
+          $ref: "#/components/schemas/LoginResponse/properties/userId"
+        reviewerId:
+          $ref: "#/components/schemas/LoginResponse/properties/userId"
+        ownedByMe:
+          type: boolean
+          description: "true will show only games the user has marked as owned"
+        wishlistedByMe:
+          type: boolean
+          description: "true will show only games the user has marked as wishlisted"
+        sortBy:
+          type: string
+          enum:
+            - ALPHABETICAL_ASC
+            - ALPHABETICAL_DESC
+            - PRICE_ASC
+            - PRICE_DESC
+            - CREATED_ASC
+            - CREATED_DESC
+            - RATING_ASC
+            - RATING_DESC
+          default: CREATED_ASC
+    GameSearchResponse:
+      title: GameSearchResponse
+      type: object
+      properties:
+        games:
+          type: array
+          items:
+            $ref: "#/components/schemas/GameOverview"
+          nullable: false
+        count:
+          type: integer
+          minimum: 0
+          example: 15
+          nullable: false
+    GameOverview:
+      title: GameOverview
+      type: object
+      properties:
+        gameId:
+          type: integer
+          minimum: 0
+          example: 1
+          nullable: false
+        title:
+          type: string
+          example: "Echoes of Aetheria"
+          minLength: 1
+          maxLength: 128
+        genreId:
+          $ref: "#/components/schemas/Genre/properties/genreId"
+        creatorId:
+          $ref: "#/components/schemas/LoginResponse/properties/userId"
+        creatorFirstName:
+          $ref: "#/components/schemas/User/properties/firstName"
+        creatorLastName:
+          $ref: "#/components/schemas/User/properties/lastName"
+        price:
+          type: number
+          description: "<i>Note: a price of 0 means the game is free to play<i>"
+          minimum: 0
+          example: 100
+        rating:
+          type: number
+          description: "<i>Note: a rating of 0 may only be achieved when there are no ratings yet, otherwise the minimum value for an individual rating is 1<i>"
+          minimum: 0
+          maximum: 10
+        platformIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Platform/properties/platformId"
+        creationDate:
+          $ref: "#/components/schemas/DateTimeOutput"
+    Game:
+      title: Game
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/GameOverview"
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          example: "Echoes of Aetheria is an epic open-world RPG set in a fractured realm where the fabric of reality is unraveling. Players take on the role of a 'Sundered', a powerful being caught between the worlds of the living and the spectral Aether..."
+          nullable: false
+        numberOfOwners:
+          type: integer
+          minimum: 0
+          example: 0
+          nullable: false
+        numberOfWishlists:
+          type: integer
+          minimum: 0
+          example: 0
+          nullable: false
+    PostGame:
+      title: PostGame
+      type: object
+      properties:
+        title:
+          $ref: "#/components/schemas/GameOverview/properties/title"
+        description:
+          $ref: "#/components/schemas/Game/properties/description"
+        genreId:
+          $ref: "#/components/schemas/GameOverview/properties/genreId"
+        price:
+          $ref: "#/components/schemas/GameOverview/properties/price"
+        platformIds:
+          $ref: "#/components/schemas/GameOverview/properties/platformIds"
+      required:
+        - title
+        - description
+        - genreId
+        - price
+        - platformIds
+    PatchGame:
+      title: PatchGame
+      type: object
+      properties:
+        title:
+          $ref: "#/components/schemas/GameOverview/properties/title"
+        description:
+          $ref: "#/components/schemas/Game/properties/description"
+        genreId:
+          $ref: "#/components/schemas/GameOverview/properties/genreId"
+        price:
+          $ref: "#/components/schemas/GameOverview/properties/price"
+        platforms:
+          $ref: "#/components/schemas/GameOverview/properties/platformIds"
+    GameReview:
+      title: Review
+      type: object
+      properties:
+        reviewerId:
+          type: integer
+          minimum: 0
+          example: 1
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 5
+        review:
+          type: string
+          minLength: 1
+          maxLength: 512
+          nullable: true
+          example: "I really enjoyed it! Spectacular camerawork helps to bring out ..."
+        reviewerFirstName:
+          $ref: "#/components/schemas/User/properties/firstName"
+        reviewerLastName:
+          $ref: "#/components/schemas/User/properties/lastName"
+        timestamp:
+          $ref: "#/components/schemas/DateTimeOutput"
+    PostGameReview:
+      title: PostReview
+      type: object
+      properties:
+        rating:
+          $ref: "#/components/schemas/GameReview/properties/rating"
+        review:
+          $ref: "#/components/schemas/GameReview/properties/review"
+      required:
+        - rating
+  securitySchemes:
+    UserToken:
+      type: apiKey
+      name: X-Authorization
+      in: header
